@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Generator — from .md docs to saved files</title>
+  <style>
+    :root {
+      --bg: #0e0f12;
+      --panel: #17181d;
+      --panel-2: #1d1f25;
+      --border: #2a2d36;
+      --text: #e8e9ed;
+      --muted: #9aa0ad;
+      --accent: #4f8cff;
+      --accent-2: #3a6fd8;
+      --green: #39c27c;
+      --radius: 10px;
+      font-size: 15px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--panel);
+    }
+    header .logo {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+    header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    .spacer { flex: 1; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background .15s;
+    }
+    .btn:hover { background: #262932; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-2); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .workspace {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .col.left { width: 42%; border-right: 1px solid var(--border); }
+    .col.right { flex: 1; }
+
+    .col-head {
+      padding: 10px 16px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .col-head .count {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1px 8px;
+      font-size: 11px;
+    }
+
+    textarea {
+      flex: 1;
+      resize: none;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      padding: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    /* tree */
+    .tree-wrap { flex: 1; overflow: auto; padding: 10px 8px; }
+    .tree { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .node { white-space: nowrap; }
+    .node .row {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px; border-radius: 6px; cursor: pointer;
+    }
+    .node .row:hover { background: var(--panel-2); }
+    .node .row.active { background: #24314d; }
+    .node .caret {
+      width: 14px; text-align: center; color: var(--muted);
+      transition: transform .1s; display: inline-block;
+    }
+    .node .caret.open { transform: rotate(90deg); }
+    .node .fname { color: var(--text); }
+    .node.dir > .row .fname { color: #cdd3e0; font-weight: 500; }
+    .node.file > .row .fname { color: #9fb3d6; }
+    .children { margin-left: 16px; border-left: 1px solid var(--border); padding-left: 2px; }
+    .file-badge { color: var(--muted); font-size: 11px; }
+
+    /* preview */
+    .preview { flex: 1; overflow: auto; background: var(--panel); margin: 0; }
+    .preview pre {
+      margin: 0; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px; line-height: 1.5; white-space: pre;
+    }
+    .preview .empty {
+      height: 100%; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; color: var(--muted); gap: 8px;
+    }
+    .preview-head {
+      padding: 8px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px; font-size: 12px;
+    }
+    .preview-head .path { font-family: monospace; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--panel-2); border: 1px solid var(--border);
+      padding: 10px 18px; border-radius: 8px; font-size: 13px;
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { border-color: #b3403f; color: #ff8f8d; }
+
+    .empty-state { padding: 40px 20px; color: var(--muted); text-align: center; font-size: 13px; }
+    .pill { color: var(--green); }
+
+    @media (max-width: 760px) {
+      .workspace { flex-direction: column; }
+      .col.left { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo"></div>
+    <h1>Project Generator</h1>
+    <span class="sub">paste your project docs .md → get real, saveable files</span>
+    <div class="spacer"></div>
+    <button class="btn" id="uploadBtn">Upload .md</button>
+    <button class="btn primary" id="genBtn" disabled>Generate files</button>
+    <button class="btn" id="zipBtn" disabled>Download ZIP</button>
+    <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain" hidden />
+  </header>
+
+  <div class="workspace">
+    <div class="col left">
+      <div class="col-head">Project documentation <span class="count" id="docCount">0 chars</span></div>
+      <textarea id="doc" placeholder="Paste your project documentation markdown here — the kind an AI writes out with the project's files in code blocks…"></textarea>
+    </div>
+
+    <div class="col right">
+      <div class="col-head">Generated files <span class="count" id="fileCount">—</span></div>
+      <div class="tree-wrap">
+        <div id="tree" class="tree"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-head" id="previewHead" hidden>
+    <span class="path" id="previewPath"></span>
+    <button class="btn" id="dlSingleBtn">Download</button>
+  </div>
+  <div class="preview" id="preview">
+    <div class="empty">
+      <div style="font-size:28px">📄</div>
+      <div>Generate files to preview them here</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const doc = $('doc'), genBtn = $('genBtn'), zipBtn = $('zipBtn');
+    const treeEl = $('tree'), preview = $('preview');
+    let currentPath = null;
+
+    function toast(msg, isError) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(t._h);
+      t._h = setTimeout(() => t.className = 'toast', 2600);
+    }
+
+    doc.addEventListener('input', () => {
+      $('docCount').textContent = doc.value.length + ' chars';
+      genBtn.disabled = doc.value.trim().length === 0;
+    });
+
+    $('uploadBtn').onclick = () => $('fileInput').click();
+    $('fileInput').onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      doc.value = await f.text();
+      $('docCount').textContent = doc.value.length + ' chars';
+      genBtn.disabled = false;
+      toast('Loaded ' + f.name);
+      e.target.value = '';
+    };
+
+    genBtn.onclick = async () => {
+      genBtn.disabled = true;
+      genBtn.textContent = 'Generating…';
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: doc.value }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Generation failed');
+        renderTree(data);
+        $('fileCount').textContent = data.fileCount + ' files';
+        zipBtn.disabled = false;
+        toast('Generated ' + data.fileCount + ' files in "' + data.root + '/"');
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Generate files';
+      }
+    };
+
+    function renderTree(data) {
+      treeEl.innerHTML = '';
+      const root = document.createElement('div');
+      root.className = 'node dir';
+      root.appendChild(row('📁', data.root, null, true));
+      const children = document.createElement('div');
+      children.className = 'children';
+      data.tree.forEach((n) => children.appendChild(makeNode(n)));
+      root.appendChild(children);
+      treeEl.appendChild(root);
+    }
+
+    function makeNode(n) {
+      const div = document.createElement('div');
+      if (n.type === 'dir') {
+        div.className = 'node dir';
+        div.appendChild(row('📁', n.name, null, true));
+        const kids = document.createElement('div');
+        kids.className = 'children';
+        n.children.forEach((c) => kids.appendChild(makeNode(c)));
+        div.appendChild(kids);
+      } else {
+        div.className = 'node file';
+        div.appendChild(row('📄', n.name, n.path, false));
+      }
+      return div;
+    }
+
+    function row(icon, name, path, isDir) {
+      const r = document.createElement('span');
+      r.className = 'row';
+      if (isDir) {
+        const caret = document.createElement('span');
+        caret.className = 'caret open'; caret.textContent = '▸';
+        r.appendChild(caret);
+        r.appendChild(document.createTextNode(icon + ' '));
+        const nm = document.createElement('span'); nm.className = 'fname'; nm.textContent = name;
+        r.appendChild(nm);
+        r.onclick = () => {
+          const kids = r.parentElement.querySelector(':scope > .children');
+          const open = caret.classList.toggle('open');
+          kids.style.display = open ? '' : 'none';
+        };
+      } else {
+        r.appendChild(document.createTextNode(icon + ' '));
+        const nm = document.createElement('span'); nm.className = 'fname'; nm.textContent = name;
+        r.appendChild(nm);
+        r.onclick = () => openFile(path, r);
+      }
+      return r;
+    }
+
+    async function openFile(path, rowEl) {
+      currentPath = path;
+      document.querySelectorAll('.tree .row.active').forEach((e) => e.classList.remove('active'));
+      if (rowEl) rowEl.classList.add('active');
+      const res = await fetch('/api/file?path=' + encodeURIComponent(path));
+      const data = await res.json();
+      const head = $('previewHead');
+      head.hidden = false;
+      $('previewPath').textContent = path;
+      const pre = document.createElement('pre');
+      pre.textContent = data.content;
+      preview.innerHTML = '';
+      preview.appendChild(pre);
+    }
+
+    $('dlSingleBtn').onclick = () => {
+      if (currentPath) window.location = '/api/download?path=' + encodeURIComponent(currentPath);
+    };
+    zipBtn.onclick = () => { window.location = '/api/zip'; };
+  </script>
+</body>
+</html>
